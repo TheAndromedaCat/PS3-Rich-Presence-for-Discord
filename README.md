@@ -44,30 +44,44 @@ Display what game you are playing on PS3 via your PC!
 * A Python 3.9 interpreter installed on the PC if you do not wish to use the executable file
 
 ### Windows
-* [version 1.9.7 .exe](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/v1.9.7/PS3RPD.exe)
-or
-* [version 1.9.7 .py](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/v1.9.7/PS3RPD.py)
+
+#### GUI Version (Graphical Interface)
+* **Standalone Executable** *(Recommended, no Python required)*:  
+  [Download PS3RPD_GUI.exe v2.0.0](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.0.0/PS3RPD_GUI.exe)
+* **Python Source Files** *(Requires Python 3)*:  
+  [Download PS3RPD-GUI-v2.0-Python.zip](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.0.0/PS3RPD-GUI-v2.0-Python.zip)  
+  Extract the ZIP archive and run `python start.py` or `python PS3RPD_GUI.py`.
+
+#### CLI Version (Terminal / Command Line)
+* **Standalone Executable** *(No Python required)*:  
+  [Download PS3RPD.exe v2.0.0](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.0.0/PS3RPD.exe)
+* **Standalone Python File**:  
+  [Download PS3RPD.py v2.0.0](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.0.0/PS3RPD.py)  
+  Run directly with `python PS3RPD.py`.
 
 #### Installing as a Windows service (optional)
-Download [NSSM](https://nssm.cc/release/nssm-2.24.zip) and run `nssm install <service name ie. ps3rpd>` to install PS3RPD as a Windows service.
-WARNING: PS3RPD.exe must be in a location that won't change ie. C:\ps3rpd\PS3RPD.exe
+Download [NSSM](https://nssm.cc/release/nssm-2.24.zip) and run `nssm install <service name ie. ps3rpd>` to install PS3RPD as a Windows service.  
+WARNING: PS3RPD.exe must be in a location that won't change ie. `C:\ps3rpd\PS3RPD.exe`
 
 > [!NOTE]
-> The executable file will very likely be flagged as a virus on your computer due to `pyinstaller` being used to compile it.
-> As far as I know, there is nothing I can do to fix this.
+> Executable files may be flagged by antivirus software due to `pyinstaller` bundling. You can inspect the source code or run directly via Python.
 
 ### Linux 
 
-To download and run the script for the first time:
-```bash
-# Clone the GitHub repository under the user folder
-git clone https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord ~/ps3-rich-presence
-# Run the start script
-cd ~/ps3-rich-presence && ./start.py
-```
+#### GUI Version (Graphical Interface)
+* **Python Source Files**:  
+  [Download PS3RPD-GUI-v2.0-Python.zip](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.0.0/PS3RPD-GUI-v2.0-Python.zip)  
+  Extract the archive and run `./start.py` or `python3 PS3RPD_GUI.py`.
+* Or clone directly via Git:
+  ```bash
+  git clone https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord ~/ps3-rich-presence
+  cd ~/ps3-rich-presence && ./start.py
+  ```
 
-From there you can run the script via double clicking on the file within your file explorer, and clicking on "Run (in terminal)".<br>
-Alternatively, you can run the command via the terminal by running `cd ~/ps3-rich-presence && ./start.py` again.
+#### CLI Version (Terminal / Command Line)
+* **Standalone Python File**:  
+  [Download PS3RPD.py v2.0.0](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.0.0/PS3RPD.py)  
+  Run directly with `python3 PS3RPD.py`.
 
 #### Installing as a systemd service (optional)
 <details>
