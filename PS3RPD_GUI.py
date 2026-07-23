@@ -351,17 +351,14 @@ class PS3RPD_GUI(tk.Tk):
         )
         self.update_idletasks()
 
-        # Handle window close (X button exits app completely)
-        self.protocol("WM_DELETE_WINDOW", self.exit_app_completely)
-
-        # Handle window minimize (_ button sends to tray if enabled)
-        self.bind("<Unmap>", self.on_window_unmap)
+        # Handle window close (X button minimizes to tray if enabled, else exits)
+        self.protocol("WM_DELETE_WINDOW", self.on_window_close)
 
         # Start RPC worker thread
         self.start_rpc_worker()
 
         # System tray setup
-        if HAS_TRAY and self.prepWork.config.get("use_tray", False):
+        if HAS_TRAY:
             self.setup_tray_icon()
 
         # Check if started minimized
@@ -611,7 +608,7 @@ class PS3RPD_GUI(tk.Tk):
         ttk.Checkbutton(sys_frame, text="Start Minimized", variable=self.var_start_minimized).pack(anchor="w", pady=2)
 
         self.var_use_tray = tk.BooleanVar(value=bool(self.prepWork.config.get("use_tray", True)))
-        ttk.Checkbutton(sys_frame, text="Use System Tray Icon (Minimizes to Notification Area)", variable=self.var_use_tray).pack(anchor="w", pady=2)
+        ttk.Checkbutton(sys_frame, text="Minimize to tray on close", variable=self.var_use_tray).pack(anchor="w", pady=2)
 
         # Save Button
         btn_save = ttk.Button(scroll_content, text=" Save & Apply Settings ", command=self.save_settings)
@@ -1044,10 +1041,11 @@ class PS3RPD_GUI(tk.Tk):
                 pass
             self.tray_icon = None
 
-    def on_window_unmap(self, event):
-        if event.widget == self and self.state() == "iconic":
-            if self.prepWork.config.get("use_tray", True) and HAS_TRAY:
-                self.withdraw()
+    def on_window_close(self):
+        if HAS_TRAY and self.prepWork.config.get("use_tray", True):
+            self.withdraw()
+        else:
+            self.exit_app_completely()
 
     def restore_from_tray(self):
         self.deiconify()
