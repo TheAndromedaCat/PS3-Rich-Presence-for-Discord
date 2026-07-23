@@ -1,0 +1,650 @@
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#     "bs4",
+#     "networkscan",
+#     "pypresence",
+#     "requests",
+# ]
+# ///
+from pathlib import Path
+from socket import socket, AF_INET, SOCK_DGRAM  # used to get host IP address
+import json  # used for configuration
+import urllib.parse  # used for URL encoding search terms
+import re  # used for regular expressions
+import os  # used to test if config exists
+import sys
+from time import (
+    sleep,
+)  # used to add delay to mitigate rate limiting and webmanMOD memory consumption
+import subprocess  # used to send ICMP ping packets to PS3
+import platform  # used to get operating system of PC
+import sqlite3  # used for getting image from database
+from time import time
+
+try:
+    import networkscan  # used for automatic obtaining IP address
+    from bs4 import BeautifulSoup  # used for webpage scraping
+    import requests  # used to test if given IP belongs to PS3
+    from requests.exceptions import (
+        ConnectionError,
+    )  # used to handle thrown errors on connecting to webpage
+    from pypresence import (
+        Presence,
+        InvalidPipe,
+        InvalidID,
+        DiscordNotFound,
+    )  # used for sending details to Discord
+except ImportError as e:
+    print(f"\nMissing required Python package: {e}")
+    print("Attempting to auto-install missing packages via pip...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "bs4", "networkscan", "pypresence", "requests"])
+        import networkscan
+        from bs4 import BeautifulSoup
+        import requests
+        from requests.exceptions import ConnectionError
+        from pypresence import (
+            Presence,
+            InvalidPipe,
+            InvalidID,
+            DiscordNotFound,
+        )
+        print("Dependencies installed successfully!\n")
+    except Exception as install_err:
+        print(f"Auto-installation failed: {install_err}")
+        print("Please run 'start.py' or run: pip install bs4 networkscan pypresence requests")
+        input("\nPress Enter to exit...")
+        sys.exit(1)
+
+
+default_config = {
+    "ip": "",
+    "client_id": 780389261870235650,
+    "wait_seconds": 35,
+    "show_temp": True,
+    "retro_covers": False,
+    "show_elapsed": True,
+    "hibernate_seconds": 600,
+    "ip_prompt": True,
+    "show_timer": True,
+    "prefer_dev_app": False,
+    "use_appname": False,
+    "steamgriddb_api_key": "",
+    "gui_theme": "azure",
+    "gui_mode": "auto",
+}
+
+
+class PrepWork:  # Python2 class should be "class PrepWork(object):" ?
+    config_path = Path("ps3rpdconfig.txt")
+
+    def __init__(self):
+        self.RPC = None
+        self.config = {}
+
+    def read_config(self):
+        if self.config_path.is_file():
+            with self.config_path.open(mode="r") as f:
+                self.config = json.load(f)
+            self.config["wait_seconds"] = max(15, self.config["wait_seconds"])
+            if "steamgriddb_api_key" not in self.config:
+                self.prompt_steamgriddb_api_key()
+            if not self.test_for_webman(self.config["ip"]) and self.config["ip_prompt"]:
+                print("PS3 cannot be reached via the IP saved in the config file.")
+                self.prompt_user()
+        else:
+            self.config = default_config.copy()
+            self.prompt_user()
+
+    def prompt_steamgriddb_api_key(self):
+        print("\nSteamGridDB API key is optional, but required to fetch game cover images.")
+        key_input = input("Enter SteamGridDB API key (press Enter to skip): ").strip()
+        self.config["steamgriddb_api_key"] = key_input
+        with self.config_path.open(mode="w+") as f:
+            json.dump(self.config, f, indent=4)
+
+    def prompt_user(self):
+        choice = "placeholder"
+        accepted = ["a", "m"]
+        print("\nGet PS3's IP address automatically, or manually?")
+        while (
+            choice[0].lower() not in accepted
+        ):  # test if first character of choice is in array
+            choice = input('Please enter either "A", or "M": ')
+        if choice[0].lower() == "a":
+            self.grab_host_network()
+        elif choice[0].lower() == "m":
+            self.get_IP_from_user()
+        else:
+            print("Unexpected input")
+            input("\nPress Enter to exit...")
+            sys.exit(1)
+        self.prompt_steamgriddb_api_key()
+
+    def grab_host_network(
+        self,
+    ):  # hard to account for what users firewall and network will look like. Function may not work for all users.
+        hostNetwork = None
+        try:
+            tempSock = socket(AF_INET, SOCK_DGRAM)
+            tempSock.connect(("8.8.8.8", 80))
+            hostNetwork = tempSock.getsockname()[0]
+            tempSock.close()
+        except Exception as e:
+            print(f'Error while getting host network. "{e}"')
+
+        if hostNetwork is not None:
+            hostNetwork = re.search("^(.*)\.", hostNetwork).group(
+                0
+            )  # remove machine's octet
+            print(f'expected network is "{hostNetwork}"')
+            self.scan_network(hostNetwork)
+
+    def scan_network(self, my_network):  # takes IPv4 address in form 'x.x.x.'
+        import concurrent.futures
+
+        subnet_prefix = my_network if my_network.endswith(".") else f"{my_network}."
+        ips_to_scan = [f"{subnet_prefix}{i}" for i in range(1, 255)]
+
+        def _check_target(ip_addr):
+            try:
+                s = socket(AF_INET, SOCK_STREAM)
+                s.settimeout(0.3)
+                res = s.connect_ex((ip_addr, 80))
+                s.close()
+                if res == 0 and self.test_for_webman(ip_addr):
+                    return ip_addr
+            except Exception:
+                pass
+            return None
+
+        while True:
+            print(f"Scanning local network {subnet_prefix}0/24 for PS3 webMAN MOD...")
+            found_ip = None
+            with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+                futures = [executor.submit(_check_target, ip) for ip in ips_to_scan]
+                for future in concurrent.futures.as_completed(futures):
+                    res = future.result()
+                    if res:
+                        found_ip = res
+                        break
+
+            if found_ip:
+                print(f"Found PS3 webMAN MOD at IP: {found_ip}")
+                self.save_config(found_ip)
+                break
+            else:
+                print("PS3 not found on network, waiting 20 seconds before retry")
+                sleep(20)
+
+    def get_IP_from_user(self):
+        while True:
+            ip = input("Enter PS3's IP address: ")
+            if self.test_for_webman(ip):
+                self.save_config(ip)
+                break
+
+    def test_for_webman(self, ip):
+        response = None
+        url = f"http://{ip}"
+        try:  # test if ANY webpage is running on given IP
+            response = requests.get(url, headers=headers)
+        except ConnectionError:
+            print(f'No webpage found on "{ip}"')
+            return False
+        if response is not None:
+            soup = BeautifulSoup(response.text, "html.parser")
+            pageTitle = str(
+                soup.find("title")
+            )  # default type is bs4.element.tag, needs to be string
+            if (
+                "wMAN" in pageTitle or "webMAN" in pageTitle
+            ):  # test for known value in <title>
+                print(f'given IP "{ip}" belongs to webman.')
+                return True
+            else:  # a webpage was found, but does not satisfy check to belong to webman
+                print(
+                    f'WebmanMOD not found on "{ip}", reports "{pageTitle}". If you believe this is an error, please contact the developer. '
+                    f"Please ensure the PS3 is turned on, has webmanMOD installed and running, "
+                    f"and is connected to the same network as the PC."
+                )
+                return False
+
+    def save_config(self, valid_ip):
+        self.config["ip"] = valid_ip
+        with self.config_path.open(mode="w+") as f:
+            json.dump(self.config, f, indent=4)
+
+    def connect_to_discord(self):
+        try:
+            cid = str(self.config.get("client_id", 780389261870235650)).strip()
+            self.RPC = Presence(cid)
+            self.RPC.connect()
+            print(f"connected to Discord client with ID {cid}")
+            return True
+        except Exception as e:
+            print(f'connect_to_discord(): could not connect to Discord client: "{e}"')
+            self.RPC = None
+            return False
+
+
+class GatherDetails:
+    def __init__(self):
+        self.soup = None
+        self.thermalData = None
+        self.name = None
+        self.titleID = None
+        self.image = None
+        self.image_source = "Discord Developer Application"
+        self.isRetroGame = False
+        self.prevTitle = ""
+
+    def ping_PS3(
+        self, ip=None
+    ):  # Will work if webman is unloaded for some reason, will hopefully greatly reduce risk of
+        # PS3 crashing when webman is contacted while also loading or quitting out of a game. (! Needs further testing !)
+        target_ip = ip or (prepWork.config.get("ip", "") if prepWork and hasattr(prepWork, "config") else "")
+        if not target_ip:
+            return False
+        kwargs = {}
+        if platform.system().lower() == "windows":
+            command = ["ping", "-n", "2", "-w", "1000", target_ip]
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        else:
+            command = ["ping", "-c", "2", "-W", "1", target_ip]
+        with open(
+            os.devnull, "w"
+        ) as DEVNULL:  # used so output of ping doesn't spam console
+            try:
+                subprocess.check_call(
+                    command, stdout=DEVNULL, stderr=DEVNULL, **kwargs
+                )  # ! needs to be tested on Linux !
+                return True
+            except subprocess.CalledProcessError:
+                return False
+
+    def get_html(self, ip=None):
+        target_ip = ip or (prepWork.config.get("ip", "") if prepWork and hasattr(prepWork, "config") else "")
+        if not target_ip:
+            return False
+        url = f"http://{target_ip}/cpursx.ps3?/sman.ps3"
+        if not self.ping_PS3(target_ip):
+            return False
+
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            self.soup = BeautifulSoup(response.text, "html.parser")
+            return True
+        except ConnectionError as e:
+            print(f'get_html():  webman not found. "{e}".')
+            return False
+
+    def get_thermals(self):
+        thermalData = str(self.soup.find("a", href="/cpursx.ps3?up"))
+        # you can change to Fahrenheit by changing "C" to "F".
+        cpu = re.search("CPU(.+?)C", thermalData)
+        rsx = re.search("RSX(.+?)C", thermalData)
+        try:
+            cpu = cpu.group(0)
+            rsx = rsx.group(0)
+            self.thermalData = f"{cpu} | {rsx}"
+            print(f"get_thermals():     {self.thermalData}")
+        except AttributeError:
+            print(
+                f"get_thermals(): could not find html for thermal data, has webmanMOD been updated since {wmanVer}?"
+            )
+
+    def decide_game_type(self):
+        # PS3 games will only be detected when they are OPEN, however PS2 and PS1 games will be detected when they are MOUNTED
+        self.isRetroGame = False  # reset boolean each test
+        if (
+            self.soup.find("a", target="_blank") is not None
+        ):  # PS3ISO, JB Folder Format, and PS3 PKG games will display this field in wman
+            print("decide_game_type():  PS3 Game or Homebrew")
+            self.get_PS3_details()
+        elif (
+            self.soup.find(
+                "a", href=re.compile("/(dev_hdd0|dev_usb00[0-9])/(PSXISO|PS2ISO)")
+            )
+            is not None
+        ):  # search for PSX or PS2 mounted game
+            self.isRetroGame = True
+            print("decide_game_type():  Retro")
+            self.get_retro_details()
+        else:
+            print("decide_game_type():  XMB")
+            self.name = "XMB"
+            self.image = "xmb"
+            self.image_source = "Discord Developer Application"
+            self.titleID = None  # even though not used needs to be reset so prev titleID is not shown when on XMB
+
+    def get_PS3_details(self):
+        titleID = self.soup.find(
+            "a", target="_blank"
+        )  # get titleID of open game/homebrew
+        name = self.soup.find(
+            "a", target="_blank"
+        ).find_next_sibling()  # get name of open game/homebrew
+        name = str(name).replace(
+            "\n", ""
+        )  # need to remove newline characters as they break regex
+        try:
+            titleID = re.search(">(.*)<", str(titleID)).group(
+                1
+            )  # remove surrounding HTML
+            name = re.search(">(.*)<", str(name)).group(1)
+            if (
+                re.search("(.+)[0-9]{2}.[0-9]{2}", name) is not None
+            ):  # remove game version info if present
+                name = re.search("(.+)[0-9]{2}.[0-9]{2}", name).group(1)
+        except AttributeError:
+            print(
+                f"get_PS3_details(): could not find html for game data, has webmanMOD been updated since {wmanVer}?"
+            )
+        self.name = name
+        self.titleID = titleID
+        print(f"get_PS3_details():  {titleID} | {name}")
+        if self.prevTitle != titleID:  # only get new image if a new game is found
+            self.get_PS3_image()
+            self.prevTitle = titleID
+
+    def get_retro_details(
+        self,
+    ):  # only tested with PSX and PS2 games, PSP and retroarch game compatibility unknown
+        name = "PlayStation 1/2"  # if a PSX or PS2 game is not detected, or extern variable is False, this default will be used
+        if prepWork.config["retro_covers"]:
+            # name detected is based on name of file
+            if (
+                self.soup.find(
+                    "a", href=re.compile("/(dev_hdd0|dev_usb00[0-9])/PSXISO")
+                )
+                is not None
+            ):  # only PS1
+                name = self.soup.find(
+                    "a", href=re.compile("/(dev_hdd0|dev_usb00[0-9])/PSXISO")
+                ).find_next_sibling()
+            elif (
+                self.soup.find(
+                    "a", href=re.compile("/(dev_hdd0|dev_usb00[0-9])/PS2ISO")
+                )
+                is not None
+            ):  # only PS2
+                name = self.soup.find(
+                    "a", href=re.compile("/(dev_hdd0|dev_usb00[0-9])/PS2ISO")
+                ).find_next_sibling()
+                # ! can set a boolean here if need to know a PS2 game is mounted !
+            try:
+                name = re.search('">(.*)</a>', str(name)).group(1)
+            except AttributeError as e:
+                print(f'! get_retro_details(): error with regex "{e}" !')
+        self.name = name
+        print(f"get_retro_details(): {name}")
+        self.get_retro_image()
+
+    def get_PS3_image(
+        self,
+    ):  # allow user to prefer using only discord dev app, otherwise try external psimg.db file, followed by steamgriddb / gametdb
+        self.image = self.titleID.lower() if self.titleID else "xmb"
+        self.image_source = "Discord Developer Application"
+        if prepWork.config["prefer_dev_app"] is False:
+            if os.path.isfile(
+                "psimg.db"
+            ):  # test if database is in same directory as script
+                self.image = self.use_local_db()
+                self.image_source = "Local Database (psimg.db)"
+            else:
+                # 1. Attempt to get image from SteamGridDB
+                img_url = self.use_steamgriddb()
+                if img_url and img_url.startswith("http"):
+                    self.image = img_url
+                    self.image_source = "SteamGridDB"
+                    print(f"get_PS3_image():    {self.image}")
+                    return
+
+                # 2. Fallback to GameTDB
+                gtdb_res = self.use_gametdb()
+                if gtdb_res and gtdb_res.startswith("http"):
+                    self.image = gtdb_res
+                    self.image_source = "GameTDB"
+                    return
+                else:
+                    self.image = gtdb_res
+                    self.image_source = "Discord Developer Application"
+        print(f"get_PS3_image():    {self.image}")
+
+    def use_local_db(
+        self,
+    ):  # Google might of broken this, doesn't seem to work on my end anymore
+        con = sqlite3.connect("psimg.db")  # connect to DB
+        cur = con.cursor()
+        result = cur.execute(
+            f"SELECT * FROM PS3 WHERE titleID == '{self.titleID.upper()}'"
+        )  # must be uppercase for db
+        result = result.fetchall()
+        if len(result) == 0:  # no value found
+            print(
+                f'titleID "{self.titleID}" not found in database, using Discord developer application'
+            )
+            con.close()
+            return self.titleID.lower()  # bandaid fix
+        else:
+            imgName = result[0][2]  # [][0] = titleID, [][1] = name, [][2] = imageURL
+            imgName = re.sub(
+                "[ \n]", "", imgName
+            )  # removes newline (\n) and space ( ) that is present in database for some reason
+            con.close()
+            print("using psimg.db")
+            return imgName
+
+    def use_steamgriddb(self):
+        if not self.name or self.name == "XMB":
+            return None
+
+        api_key = prepWork.config.get("steamgriddb_api_key", "").strip()
+        if not api_key:
+            print("use_steamgriddb(): No SteamGridDB API key configured, falling back to GameTDB")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "PS3RPD/1.9.7",
+        }
+
+        # Clean search term (remove trademark/copyright symbols and normalize spaces)
+        term = (
+            self.name.replace("®", "")
+            .replace("™", "")
+            .replace("©", "")
+            .replace("&amp;", "&")
+        )
+        term = re.sub(r"\s+", " ", term).strip()
+        encoded_term = urllib.parse.quote(term)
+
+        try:
+            search_url = f"https://www.steamgriddb.com/api/v2/search/autocomplete/{encoded_term}"
+            res = requests.get(search_url, headers=headers, timeout=10)
+            if res.status_code != 200:
+                print(f"use_steamgriddb(): Search HTTP {res.status_code} for '{term}'")
+                return None
+
+            search_data = res.json()
+            if not search_data.get("success") or not search_data.get("data"):
+                print(f"use_steamgriddb(): No game found for '{term}'")
+                return None
+
+            game_id = search_data["data"][0]["id"]
+            game_name = search_data["data"][0]["name"]
+
+            # 1. Try 1:1 grids first (1024x1024 or 512x512)
+            grid_url_1to1 = f"https://www.steamgriddb.com/api/v2/grids/game/{game_id}?types=static&humor=false&dimensions=1024x1024,512x512"
+            res_grid = requests.get(grid_url_1to1, headers=headers, timeout=10)
+            if res_grid.status_code == 200:
+                grid_data = res_grid.json()
+                if grid_data.get("success") and grid_data.get("data"):
+                    img_url = grid_data["data"][0]["url"]
+                    print(f"using SteamGridDB 1:1 cover for '{game_name}' ({game_id})")
+                    return img_url
+
+            # 2. Fallback to other sizes if 1:1 is not available
+            grid_url_any = f"https://www.steamgriddb.com/api/v2/grids/game/{game_id}?types=static&humor=false"
+            res_grid_any = requests.get(grid_url_any, headers=headers, timeout=10)
+            if res_grid_any.status_code == 200:
+                grid_data_any = res_grid_any.json()
+                if grid_data_any.get("success") and grid_data_any.get("data"):
+                    img_url = grid_data_any["data"][0]["url"]
+                    print(f"using SteamGridDB cover for '{game_name}' ({game_id})")
+                    return img_url
+
+            print(
+                f"use_steamgriddb(): No static grids found for '{game_name}' ({game_id})"
+            )
+        except Exception as e:
+            print(f"use_steamgriddb(): Exception occurred: {e}")
+
+        return None
+
+    def use_gametdb(self):  # Original idea from AndreCox
+        if not self.titleID or len(self.titleID) < 3:
+            return self.titleID.lower() if self.titleID else "xmb"
+
+        region_map = {  # this needs further testing
+            "A": "ZH",  # ?
+            "E": "EN",
+            "H": "US",  # ?
+            "J": "JA",
+            "K": "KO",
+            "U": "US",
+        }
+        val = region_map.get(
+            self.titleID[2]
+        )  # feed region_map 3rd char of titleID. use get() to handle unexpected keys
+        if not val:
+            print(
+                f"! use_gametdb(): Unexpected key: {self.titleID[2]} ! \nFalling back to Discord dev app images"
+            )
+            return self.titleID.lower()  # bandaid fix, use Discord dev app
+        else:
+            url = f"https://art.gametdb.com/ps3/cover/{val}/{self.titleID}.jpg"  # build URL
+            status = requests.get(url, headers={"User-Agent": "PS3RPD/1.9.7"}, timeout=10)  # set headers at request of gametdb contributor
+            if status.status_code == 200:  # test if page exists
+                print("using GameTDB")
+                return url
+            else:
+                print(
+                    f"use_gametdb(): no image found at {url}, using Discord dev app image"
+                )
+                return self.titleID.lower()  # bandaid fix, use Discord dev app
+
+    def get_retro_image(self):  # uses 'name' for image names
+        if prepWork.config["prefer_dev_app"] is False and self.name != "PlayStation 1/2":
+            img_result = self.use_steamgriddb()
+            if img_result and img_result.startswith("http"):
+                self.image = img_result
+                self.image_source = "SteamGridDB"
+                print(f"get_retro_image():  {self.image}")
+                return
+        # apply Discord developer application naming conventions
+        imgName = self.name.lower()  # must be lowercase
+        imgName = imgName.replace(" ", "_")  # replace spaces with underscores
+        imgName = imgName.replace(
+            "&amp;", ""
+        )  # regex below would only remove "&" without this
+        imgName = re.sub(
+            "[\W]+", "", imgName
+        )  # replace any non-letter, digit, or underscore
+        imgName = imgName[:32]  # maximum length of 32 characters
+        self.image = imgName
+        self.image_source = "Discord Developer Application"
+        print(f"get_retro_image():  {imgName}")
+
+
+headers = {
+    "User-Agent": "Mozilla/5.0"
+}  # Alternatively {'Content-Type': 'text/html'}. Used by both classes
+wmanVer = "1.47.45"  # static string so I can indicate what ver the script was last tested with
+
+def main_cli():
+    global prepWork, closed, gatherDetails, timer, prevTitle
+    prepWork = PrepWork()
+    prepWork.read_config()  # runs through majority of functions in PrepWork class
+    prepWork.connect_to_discord()  # running NetworkScan before PyPresence breaks asyncIO, I am not motivated enough to find proper fix.
+    closed = False  # boolean for RPC pipe
+    gatherDetails = GatherDetails()
+    timer = None  # default value for if config set to false
+    if prepWork.config["show_timer"]:
+        timer = time()  # start timer
+    prevTitle = ""  # set default value to be compared in get_PS3_details()
+
+    if (
+        prepWork.config["ip"] is None
+    ):  # very basic error notification for if PrepWork breaks
+        print("script failed to execute critical functions.")
+        input("\nPress Enter to exit...")
+        sys.exit(1)
+
+    while True:
+        if not gatherDetails.get_html():  # triggered if webman goes down
+            if (
+                gatherDetails.isRetroGame is True
+            ):  # should only occur if PS2 game is mounted
+                print(
+                    f"PS2 game previously mounted, keeping RPC active and waiting {prepWork.config['wait_seconds']} seconds"
+                )
+                sleep(prepWork.config["wait_seconds"])
+            else:
+                print(
+                    f"PS3 not found on network, closing RPC and hibernating {prepWork.config['hibernate_seconds']} seconds."
+                )
+                if not closed:
+                    prepWork.RPC.clear()
+                prepWork.RPC.close()  # destroy pipe
+                closed = True
+                sleep(float(prepWork.config["hibernate_seconds"]))
+        else:  # continue with normal program loop
+            print("")
+            if closed:  # decide if RPC needs to be reconnected
+                prepWork.connect_to_discord()
+                timer = time()
+                closed = False
+            if prepWork.config["show_temp"]:  # first character of variable in lowercase
+                gatherDetails.get_thermals()
+                gatherDetails.thermalData = gatherDetails.thermalData.replace(
+                    "Â", ""
+                )  # ! bandaid fix ! ANSI encoding is being used on some users??
+            gatherDetails.decide_game_type()
+            # print(f'{gatherDetails.name}, {gatherDetails.thermalData}, {gatherDetails.image}, {gatherDetails.titleID}')   # debugging
+            gatherDetails.name = gatherDetails.name.replace(
+                "Â", ""
+            )  # ! bandaid fix ! ANSI encoding is being used on some users??
+
+            if prepWork.config["use_appname"]:  # accommodate API now allowing for us to set name
+                try:
+                    prepWork.RPC.update(
+                        details=gatherDetails.name,
+                        state=gatherDetails.thermalData,
+                        large_image=gatherDetails.image,
+                        large_text=gatherDetails.titleID,
+                        start=timer,
+                    )
+                except (InvalidPipe, InvalidID):
+                    prepWork.RPC.close()  # close Presence if Discord is not found     ! Does this actually do anything? !
+                    prepWork.connect_to_discord()  # start connection loop
+            else:
+                try:
+                    prepWork.RPC.update(
+                        name=gatherDetails.name,
+                        details=gatherDetails.thermalData,
+                        large_image=gatherDetails.image,
+                        large_text=gatherDetails.titleID,
+                        start=timer,
+                    )
+                except (InvalidPipe, InvalidID):
+                    prepWork.RPC.close()  # close Presence if Discord is not found     ! Does this actually do anything? !
+                    prepWork.connect_to_discord()  # start connection loop
+            prevTitle = gatherDetails.titleID  # set new value for next loop
+            sleep(prepWork.config["wait_seconds"])
+
+
+if __name__ == "__main__":
+    main_cli()

@@ -47,16 +47,16 @@ Display what game you are playing on PS3 via your PC!
 
 #### GUI Version (Graphical Interface)
 * **Standalone Executable** *(Recommended, no Python required)*:  
-  [Download PS3RPD_GUI.exe v2.0.0](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.0.0/PS3RPD_GUI.exe)
+  [Download PS3RPD_GUI.exe v2.1.0](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.1.0/PS3RPD_GUI.exe)
 * **Python Source Files** *(Requires Python 3)*:  
-  [Download PS3RPD-GUI-v2.0-Python.zip](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.0.0/PS3RPD-GUI-v2.0-Python.zip)  
+  [Download PS3RPD-GUI-v2.1.0-Python.zip](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.1.0/PS3RPD-GUI-v2.1.0-Python.zip)  
   Extract the ZIP archive and run `python start.py` or `python PS3RPD_GUI.py`.
 
 #### CLI Version (Terminal / Command Line)
 * **Standalone Executable** *(No Python required)*:  
-  [Download PS3RPD.exe v2.0.0](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.0.0/PS3RPD.exe)
+  [Download PS3RPD.exe v2.1.0](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.1.0/PS3RPD.exe)
 * **Standalone Python File**:  
-  [Download PS3RPD.py v2.0.0](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.0.0/PS3RPD.py)  
+  [Download PS3RPD.py v2.1.0](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.1.0/PS3RPD.py)  
   Run directly with `python PS3RPD.py`.
 
 #### Installing as a Windows service (optional)
@@ -70,7 +70,7 @@ WARNING: PS3RPD.exe must be in a location that won't change ie. `C:\ps3rpd\PS3RP
 
 #### GUI Version (Graphical Interface)
 * **Python Source Files**:  
-  [Download PS3RPD-GUI-v2.0-Python.zip](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.0.0/PS3RPD-GUI-v2.0-Python.zip)  
+  [Download PS3RPD-GUI-v2.1.0-Python.zip](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.1.0/PS3RPD-GUI-v2.1.0-Python.zip)  
   Extract the archive and run `./start.py` or `python3 PS3RPD_GUI.py`.
 * Or clone directly via Git:
   ```bash
@@ -80,7 +80,7 @@ WARNING: PS3RPD.exe must be in a location that won't change ie. `C:\ps3rpd\PS3RP
 
 #### CLI Version (Terminal / Command Line)
 * **Standalone Python File**:  
-  [Download PS3RPD.py v2.0.0](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.0.0/PS3RPD.py)  
+  [Download PS3RPD.py v2.1.0](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/2.1.0/PS3RPD.py)  
   Run directly with `python3 PS3RPD.py`.
 
 #### Installing as a systemd service (optional)
