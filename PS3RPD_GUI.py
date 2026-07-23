@@ -25,8 +25,196 @@ try:
 except ImportError:
     HAS_TRAY = False
 
+# TKinterModernThemes for Azure / Sun-Valley / Park themes
+try:
+    import TKinterModernThemes as TKMT
+    HAS_TKMT = True
+except ImportError:
+    HAS_TKMT = False
+
 # Import core PS3RPD backend logic
 from PS3RPD import PrepWork, GatherDetails, default_config, headers
+
+
+def get_system_mode():
+    """Detects whether Windows/OS is currently using Dark or Light mode."""
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            )
+            val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            winreg.CloseKey(key)
+            return "light" if val == 1 else "dark"
+        except Exception:
+            try:
+                key = winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    r"Software\Microsoft\Windows\DWM",
+                )
+                val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                winreg.CloseKey(key)
+                return "light" if val == 1 else "dark"
+            except Exception:
+                pass
+    return "dark"
+
+
+_themes_loaded = False
+
+
+_themes_loaded = False
+
+
+def load_all_modern_themes(root):
+    """Sources all TCL theme files from TKinterModernThemes into the Tkinter interpreter once."""
+    global _themes_loaded
+    if _themes_loaded or not HAS_TKMT:
+        return
+    for theme in ["azure", "sun-valley", "park"]:
+        try:
+            tcl_path = os.path.abspath(TKMT.__file__ + f"/../themes/{theme}/{theme}.tcl")
+            if os.path.isfile(tcl_path):
+                try:
+                    root.tk.call("source", tcl_path)
+                except tk.TclError:
+                    pass
+        except Exception as e:
+            print(f"Error loading theme {theme}: {e}")
+    _themes_loaded = True
+
+
+THEME_PRESETS = {
+    "azure-dark": {
+        "ttk_theme": "azure-dark",
+        "bg": "#333333",
+        "fg": "#ffffff",
+        "select_bg": "#007fff",
+        "select_fg": "#ffffff",
+        "field_bg": "#292929",
+    },
+    "azure-light": {
+        "ttk_theme": "azure-light",
+        "bg": "#ffffff",
+        "fg": "#000000",
+        "select_bg": "#007fff",
+        "select_fg": "#ffffff",
+        "field_bg": "#f5f5f5",
+    },
+    "sun-valley-dark": {
+        "ttk_theme": "sun-valley-dark",
+        "bg": "#1c1c1c",
+        "fg": "#ffffff",
+        "select_bg": "#60cdff",
+        "select_fg": "#000000",
+        "field_bg": "#2c2c2c",
+    },
+    "sun-valley-light": {
+        "ttk_theme": "sun-valley-light",
+        "bg": "#fafafa",
+        "fg": "#000000",
+        "select_bg": "#005fb8",
+        "select_fg": "#ffffff",
+        "field_bg": "#ffffff",
+    },
+    "park-dark": {
+        "ttk_theme": "park-dark",
+        "bg": "#313131",
+        "fg": "#eeeeee",
+        "select_bg": "#217346",
+        "select_fg": "#ffffff",
+        "field_bg": "#2b2b2b",
+    },
+    "park-light": {
+        "ttk_theme": "park-light",
+        "bg": "#ffffff",
+        "fg": "#313131",
+        "select_bg": "#107c41",
+        "select_fg": "#ffffff",
+        "field_bg": "#f0f0f0",
+    },
+}
+
+
+def apply_gui_theme(root, theme_name: str, mode_name: str):
+    """
+    Applies the specified TKinterModernThemes theme (azure, sun-valley, park)
+    and color mode (auto, dark, light) to the given Tkinter root window.
+    """
+    if not HAS_TKMT:
+        return
+
+    load_all_modern_themes(root)
+
+    theme_clean = theme_name.strip().lower()
+    if theme_clean not in ("azure", "sun-valley", "park"):
+        theme_clean = "azure"
+
+    mode_clean = mode_name.strip().lower()
+    if "auto" in mode_clean:
+        mode_clean = get_system_mode()
+    elif mode_clean not in ("dark", "light"):
+        mode_clean = get_system_mode()
+
+    target_key = f"{theme_clean}-{mode_clean}"
+    preset = THEME_PRESETS.get(target_key, THEME_PRESETS["azure-dark"])
+
+    try:
+        style = ttk.Style(root)
+        style.theme_use(preset["ttk_theme"])
+
+        bg_color = preset["bg"]
+        fg_color = preset["fg"]
+        select_bg = preset["select_bg"]
+        select_fg = preset["select_fg"]
+
+        # Configure root TTK styles
+        style.configure(".", background=bg_color, foreground=fg_color)
+        style.configure("TFrame", background=bg_color)
+        style.configure("TLabelframe", background=bg_color)
+        style.configure("TLabelframe.Label", background=bg_color, foreground=fg_color)
+        style.configure("TLabel", background=bg_color, foreground=fg_color)
+        style.configure("TCheckbutton", background=bg_color, foreground=fg_color)
+        style.configure("TRadiobutton", background=bg_color, foreground=fg_color)
+
+        try:
+            root.tk.call(
+                "tk_setPalette",
+                "background", bg_color,
+                "foreground", fg_color,
+                "selectBackground", select_bg,
+                "selectForeground", select_fg,
+            )
+        except Exception:
+            pass
+
+        root.option_add("*background", bg_color)
+        root.option_add("*foreground", fg_color)
+
+        try:
+            root.config(bg=bg_color)
+        except Exception:
+            pass
+
+        if hasattr(root, "settings_canvas") and root.settings_canvas:
+            try:
+                root.settings_canvas.config(bg=bg_color)
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"Failed to apply theme {target_key}: {e}")
+
+
+def get_resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller --onefile."""
+    if getattr(sys, "frozen", False):
+        base_path = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return Path(base_path) / relative_path
 
 
 def generate_tray_icon(icon_path: Path, color_rgba: tuple):
@@ -34,8 +222,9 @@ def generate_tray_icon(icon_path: Path, color_rgba: tuple):
     Loads base icon.ico, draws a colored status dot with a dark border
     in the bottom-right corner, and returns the PIL Image for pystray.
     """
-    if icon_path.is_file():
-        base_img = Image.open(icon_path).convert("RGBA")
+    target_path = icon_path if (icon_path and icon_path.is_file()) else get_resource_path("icon.ico")
+    if target_path.is_file():
+        base_img = Image.open(target_path).convert("RGBA")
     else:
         base_img = Image.new("RGBA", (64, 64), color=(0, 120, 215, 255))
 
@@ -74,27 +263,56 @@ def set_windows_autostart(enable: bool):
             print(f"Registry autostart error: {e}")
 
 
+DISCORD_ASSETS_CACHE = {}
+
+
+def fetch_discord_assets(client_id):
+    """Fetches and caches the Discord application asset map (name -> asset_id)."""
+    global DISCORD_ASSETS_CACHE
+    client_id_str = str(client_id).strip()
+    if client_id_str in DISCORD_ASSETS_CACHE:
+        return DISCORD_ASSETS_CACHE[client_id_str]
+
+    asset_map = {}
+    try:
+        import requests
+        url = f"https://discord.com/api/v9/oauth2/applications/{client_id_str}/assets"
+        res = requests.get(url, headers={"User-Agent": "PS3RPD/1.9.7"}, timeout=6)
+        if res.status_code == 200:
+            for asset in res.json():
+                asset_map[asset["name"].lower()] = asset["id"]
+    except Exception as e:
+        print(f"Discord assets API error: {e}")
+
+    DISCORD_ASSETS_CACHE[client_id_str] = asset_map
+    return asset_map
+
+
 class PS3RPD_GUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("PS3 Rich Presence for Discord")
-        self.geometry("640x540")
-        self.minsize(580, 480)
+        self.geometry("640x560")
+        self.minsize(580, 500)
 
         # Set window icon for top bar and Windows taskbar
-        self.icon_path = Path("icon.ico")
+        self.icon_path = get_resource_path("icon.ico")
         if self.icon_path.is_file():
             try:
-                self.iconbitmap(str(self.icon_path))
+                abs_icon_str = str(self.icon_path.resolve())
+                self.iconbitmap(default=abs_icon_str)
+                self.iconbitmap(abs_icon_str)
+
                 pil_icon = Image.open(self.icon_path)
                 self.tk_app_icon = ImageTk.PhotoImage(pil_icon)
-                self.iconphoto(True, self.tk_app_icon)
+                self.iconphoto(False, self.tk_app_icon)
             except Exception as e:
                 print(f"Window icon error: {e}")
 
         # Load configuration
         self.prepWork = PrepWork()
         self.load_config_silent()
+
         import PS3RPD
         PS3RPD.prepWork = self.prepWork
 
@@ -120,6 +338,14 @@ class PS3RPD_GUI(tk.Tk):
 
         # Build UI tabs
         self.create_widgets()
+
+        # Apply Azure / Modern theme across all created widgets immediately on startup
+        apply_gui_theme(
+            self,
+            self.prepWork.config.get("gui_theme", "azure"),
+            self.prepWork.config.get("gui_mode", "auto"),
+        )
+        self.update_idletasks()
 
         # Handle window close (X button exits app completely)
         self.protocol("WM_DELETE_WINDOW", self.exit_app_completely)
@@ -170,10 +396,6 @@ class PS3RPD_GUI(tk.Tk):
         PS3RPD.prepWork = self.prepWork
 
     def create_widgets(self):
-        # Configure styles
-        style = ttk.Style(self)
-        style.theme_use("clam")
-
         # Notebook tabs
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=8, pady=8)
@@ -236,38 +458,75 @@ class PS3RPD_GUI(tk.Tk):
         self.lbl_cover_img = ttk.Label(right_frame)
         self.lbl_cover_img.pack(pady=4)
 
-        self.lbl_cover_source = ttk.Label(
-            right_frame,
-            text="Source: Discord Developer Application",
-            font=("Segoe UI", 8, "italic"),
-            foreground="#555555",
-        )
+        self.lbl_cover_source = ttk.Label(right_frame, text="Source: N/A", font=("Segoe UI", 8, "italic"))
         self.lbl_cover_source.pack(pady=2)
 
-        # Action Controls Card
-        control_frame = ttk.Frame(self.tab_dashboard)
-        control_frame.pack(fill="x", padx=10, pady=8)
+        # Initial cover image load
+        self.load_cover_image("xmb")
 
-        self.btn_toggle_rpc = ttk.Button(control_frame, text="Pause Presence", command=self.toggle_rpc_pause)
-        self.btn_toggle_rpc.pack(side="left", padx=5)
+        # Control Buttons Card
+        btn_frame = ttk.Frame(self.tab_dashboard)
+        btn_frame.pack(fill="x", padx=10, pady=8)
 
-        self.btn_reconnect = ttk.Button(control_frame, text="Reconnect Discord", command=self.reconnect_rpc)
-        self.btn_reconnect.pack(side="left", padx=5)
+        self.btn_toggle_rpc = ttk.Button(btn_frame, text="Pause Presence", command=self.toggle_rpc_pause, style="Accent.TButton")
+        self.btn_toggle_rpc.pack(side="left", padx=8, pady=4)
+
+        self.btn_reconnect = ttk.Button(btn_frame, text="Reconnect Discord", command=self.reconnect_rpc)
+        self.btn_reconnect.pack(side="left", padx=8, pady=4)
+
+
 
     def build_settings_tab(self):
         # Canvas & Scrollbar for smooth settings view
-        canvas = tk.Canvas(self.tab_settings, borderwidth=0, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self.tab_settings, orient="vertical", command=canvas.yview)
-        scroll_content = ttk.Frame(canvas)
+        current_bg = ttk.Style(self).lookup(".", "background") or self.cget("bg")
+        self.settings_canvas = tk.Canvas(self.tab_settings, borderwidth=0, highlightthickness=0, bg=current_bg)
+        scrollbar = ttk.Scrollbar(self.tab_settings, orient="vertical", command=self.settings_canvas.yview)
+        scroll_content = ttk.Frame(self.settings_canvas)
 
         scroll_content.bind(
-            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            "<Configure>", lambda e: self.settings_canvas.configure(scrollregion=self.settings_canvas.bbox("all"))
         )
-        canvas.create_window((0, 0), window=scroll_content, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        self.settings_canvas.create_window((0, 0), window=scroll_content, anchor="nw")
+        self.settings_canvas.configure(yscrollcommand=scrollbar.set)
 
-        canvas.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        self.settings_canvas.pack(side="left", fill="both", expand=True, padx=5, pady=5)
         scrollbar.pack(side="right", fill="y")
+
+        # GUI Theme & Appearance
+        theme_frame = ttk.LabelFrame(scroll_content, text=" GUI Theme & Appearance ", padding=10)
+        theme_frame.pack(fill="x", padx=10, pady=6)
+
+        ttk.Label(theme_frame, text="Theme:").grid(row=0, column=0, sticky="w", pady=4)
+        self.var_gui_theme = tk.StringVar(value=str(self.prepWork.config.get("gui_theme", "azure")).lower())
+        self.cbo_gui_theme = ttk.Combobox(
+            theme_frame,
+            textvariable=self.var_gui_theme,
+            values=["azure", "sun-valley", "park"],
+            state="readonly",
+            width=16,
+        )
+        self.cbo_gui_theme.grid(row=0, column=1, sticky="w", padx=8, pady=4)
+
+        ttk.Label(theme_frame, text="Color Mode:").grid(row=0, column=2, sticky="w", padx=(16, 0), pady=4)
+        init_mode = str(self.prepWork.config.get("gui_mode", "auto")).lower()
+        mode_map = {"auto": "Auto-Detect (System)", "dark": "Dark", "light": "Light"}
+        self.var_gui_mode = tk.StringVar(value=mode_map.get(init_mode, "Auto-Detect (System)"))
+        self.cbo_gui_mode = ttk.Combobox(
+            theme_frame,
+            textvariable=self.var_gui_mode,
+            values=["Auto-Detect (System)", "Dark", "Light"],
+            state="readonly",
+            width=20,
+        )
+        self.cbo_gui_mode.grid(row=0, column=3, sticky="w", padx=8, pady=4)
+
+        def _on_theme_change(event=None):
+            mode_reverse_map = {"Auto-Detect (System)": "auto", "Dark": "dark", "Light": "light"}
+            m = mode_reverse_map.get(self.var_gui_mode.get(), "auto")
+            apply_gui_theme(self, self.var_gui_theme.get(), m)
+
+        self.cbo_gui_theme.bind("<<ComboboxSelected>>", _on_theme_change)
+        self.cbo_gui_mode.bind("<<ComboboxSelected>>", _on_theme_change)
 
         # Network Settings
         net_frame = ttk.LabelFrame(scroll_content, text=" Network Setup ", padding=10)
@@ -415,6 +674,10 @@ class PS3RPD_GUI(tk.Tk):
 
         sgdb_key_val = self.var_sgdb_key.get().strip() if self.var_use_sgdb.get() else ""
 
+        mode_reverse_map = {"Auto-Detect (System)": "auto", "Dark": "dark", "Light": "light"}
+        gui_theme_val = self.var_gui_theme.get().lower()
+        gui_mode_val = mode_reverse_map.get(self.var_gui_mode.get(), "auto")
+
         self.prepWork.config["ip"] = ip_val
         self.prepWork.config["client_id"] = client_id_val
         self.prepWork.config["wait_seconds"] = wait_seconds_val
@@ -428,6 +691,10 @@ class PS3RPD_GUI(tk.Tk):
         self.prepWork.config["autostart"] = self.var_autostart.get()
         self.prepWork.config["start_minimized"] = self.var_start_minimized.get()
         self.prepWork.config["use_tray"] = self.var_use_tray.get()
+        self.prepWork.config["gui_theme"] = gui_theme_val
+        self.prepWork.config["gui_mode"] = gui_mode_val
+
+        apply_gui_theme(self, gui_theme_val, gui_mode_val)
 
         # Write to ps3rpdconfig.txt
         with self.prepWork.config_path.open(mode="w+") as f:
@@ -621,46 +888,59 @@ class PS3RPD_GUI(tk.Tk):
 
     def load_cover_image(self, img_ref):
         def _loader():
+            pil_img = None
             try:
                 if img_ref and (img_ref.startswith("http://") or img_ref.startswith("https://")):
+                    import requests
+
                     res = requests.get(img_ref, headers=headers, timeout=8)
                     if res.status_code == 200:
                         from io import BytesIO
-                        from PIL import Image, ImageTk
 
                         pil_img = Image.open(BytesIO(res.content)).convert("RGBA")
-                        pil_img = pil_img.resize((128, 128), Image.Resampling.LANCZOS)
-                        photo = ImageTk.PhotoImage(pil_img)
 
-                        def _apply():
-                            self.cover_photo = photo
-                            self.lbl_cover_img.config(image=self.cover_photo)
+                # Case 2: Discord Developer Application asset key (e.g. "xmb", "npub30040", etc.)
+                if not pil_img and img_ref:
+                    import requests
 
-                        self.after(0, _apply)
-                        return
+                    client_id = self.prepWork.config.get("client_id", 780389261870235650)
+                    asset_map = fetch_discord_assets(client_id)
+                    key_clean = str(img_ref).strip().lower()
 
-                # Local image fallback
-                local_paths = [
-                    Path(f"img/{img_ref}.png"),
-                    Path("img/xmb.png"),
-                    Path("icon.ico"),
-                ]
-                for p in local_paths:
-                    if p.is_file():
-                        from PIL import Image, ImageTk
+                    asset_id = asset_map.get(key_clean)
+                    if not asset_id and "xmb" in asset_map:
+                        asset_id = asset_map.get("xmb")
 
-                        pil_img = Image.open(p).convert("RGBA")
-                        pil_img = pil_img.resize((128, 128), Image.Resampling.LANCZOS)
-                        photo = ImageTk.PhotoImage(pil_img)
+                    if asset_id:
+                        asset_url = f"https://cdn.discordapp.com/app-assets/{client_id}/{asset_id}.png"
+                        res = requests.get(asset_url, headers=headers, timeout=8)
+                        if res.status_code == 200:
+                            from io import BytesIO
 
-                        def _apply_local():
-                            self.cover_photo = photo
-                            self.lbl_cover_img.config(image=self.cover_photo)
+                            pil_img = Image.open(BytesIO(res.content)).convert("RGBA")
 
-                        self.after(0, _apply_local)
-                        return
+                # Case 3: Local icon.ico fallback
+                if not pil_img:
+                    icon_file = get_resource_path("icon.ico")
+                    if icon_file and icon_file.is_file():
+                        pil_img = Image.open(icon_file).convert("RGBA")
             except Exception as e:
                 print(f"Image preview loader error: {e}")
+
+            if pil_img:
+                try:
+                    pil_img = pil_img.resize((128, 128), Image.Resampling.LANCZOS)
+                except Exception:
+                    pass
+
+                def _apply_on_main(img_to_render):
+                    try:
+                        self.cover_photo = ImageTk.PhotoImage(img_to_render)
+                        self.lbl_cover_img.config(image=self.cover_photo)
+                    except Exception as err:
+                        print(f"Error setting cover photo label: {err}")
+
+                self.after(0, lambda: _apply_on_main(pil_img))
 
         threading.Thread(target=_loader, daemon=True).start()
 

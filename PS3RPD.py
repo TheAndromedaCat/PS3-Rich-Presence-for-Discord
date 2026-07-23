@@ -71,6 +71,8 @@ default_config = {
     "prefer_dev_app": False,
     "use_appname": False,
     "steamgriddb_api_key": "",
+    "gui_theme": "azure",
+    "gui_mode": "auto",
 }
 
 
