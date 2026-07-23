@@ -295,13 +295,17 @@ class PS3RPD_GUI(tk.Tk):
         self.geometry("640x560")
         self.minsize(580, 500)
 
-        # Set window icon for top bar and Windows taskbar
+        # Set window icon for top bar and OS taskbar
         self.icon_path = get_resource_path("icon.ico")
         if self.icon_path.is_file():
             try:
-                abs_icon_str = str(self.icon_path.resolve())
-                self.iconbitmap(default=abs_icon_str)
-                self.iconbitmap(abs_icon_str)
+                if sys.platform == "win32":
+                    abs_icon_str = str(self.icon_path.resolve())
+                    try:
+                        self.iconbitmap(default=abs_icon_str)
+                        self.iconbitmap(abs_icon_str)
+                    except Exception:
+                        pass
 
                 pil_icon = Image.open(self.icon_path)
                 self.tk_app_icon = ImageTk.PhotoImage(pil_icon)
@@ -627,22 +631,38 @@ class PS3RPD_GUI(tk.Tk):
         def scan_thread():
             found_ip = None
             try:
-                from socket import socket, AF_INET, SOCK_DGRAM
-                import re, networkscan
+                from socket import socket, AF_INET, SOCK_DGRAM, SOCK_STREAM
+                import re, concurrent.futures, requests
 
                 tempSock = socket(AF_INET, SOCK_DGRAM)
                 tempSock.connect(("8.8.8.8", 80))
-                hostNetwork = tempSock.getsockname()[0]
+                local_ip = tempSock.getsockname()[0]
                 tempSock.close()
 
-                hostNetwork = re.search(r"^(.*)\.", hostNetwork).group(0) + "0/24"
-                my_scan = networkscan.Networkscan(hostNetwork)
-                my_scan.run()
+                subnet_prefix = re.search(r"^(.*)\.", local_ip).group(0)
+                ips_to_scan = [f"{subnet_prefix}{i}" for i in range(1, 255)]
 
-                for host in my_scan.list_of_hosts_found:
-                    if self.prepWork.test_for_webman(host):
-                        found_ip = host
-                        break
+                def _check_target(ip_addr):
+                    try:
+                        s = socket(AF_INET, SOCK_STREAM)
+                        s.settimeout(0.3)
+                        res = s.connect_ex((ip_addr, 80))
+                        s.close()
+                        if res == 0:
+                            r = requests.get(f"http://{ip_addr}/cpursx.ps3", headers={"User-Agent": "PS3RPD/1.9.7"}, timeout=0.8)
+                            if r.status_code == 200 and ("RSX:" in r.text or "CPU:" in r.text or "PS3" in r.text):
+                                return ip_addr
+                    except Exception:
+                        pass
+                    return None
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+                    futures = [executor.submit(_check_target, ip) for ip in ips_to_scan]
+                    for future in concurrent.futures.as_completed(futures):
+                        found = future.result()
+                        if found:
+                            found_ip = found
+                            break
             except Exception as e:
                 print(f"Scan error: {e}")
 

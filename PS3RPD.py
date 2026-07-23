@@ -142,25 +142,37 @@ class PrepWork:  # Python2 class should be "class PrepWork(object):" ?
             self.scan_network(hostNetwork)
 
     def scan_network(self, my_network):  # takes IPv4 address in form 'x.x.x.'
-        found = False
-        # adapted from nychron's code
-        my_network += "0/24"  # append 4th octet and short-form subnet mask
+        import concurrent.futures
 
-        # Run the scan of hosts using pings
+        subnet_prefix = my_network if my_network.endswith(".") else f"{my_network}."
+        ips_to_scan = [f"{subnet_prefix}{i}" for i in range(1, 255)]
+
+        def _check_target(ip_addr):
+            try:
+                s = socket(AF_INET, SOCK_STREAM)
+                s.settimeout(0.3)
+                res = s.connect_ex((ip_addr, 80))
+                s.close()
+                if res == 0 and self.test_for_webman(ip_addr):
+                    return ip_addr
+            except Exception:
+                pass
+            return None
+
         while True:
-            my_scan = networkscan.Networkscan(my_network)
-            my_scan.run()
+            print(f"Scanning local network {subnet_prefix}0/24 for PS3 webMAN MOD...")
+            found_ip = None
+            with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+                futures = [executor.submit(_check_target, ip) for ip in ips_to_scan]
+                for future in concurrent.futures.as_completed(futures):
+                    res = future.result()
+                    if res:
+                        found_ip = res
+                        break
 
-            # Display the IP address of all the hosts found
-            print("Completed network scan.")
-            print(my_scan.list_of_hosts_found)
-
-            for i in range(len(my_scan.list_of_hosts_found)):
-                if self.test_for_webman(my_scan.list_of_hosts_found[i]):
-                    self.save_config(my_scan.list_of_hosts_found[i])
-                    found = True
-                    break  # do not test further IPs if one is found to belong to webman
-            if found is True:  # need second IF statement to break out of while loop
+            if found_ip:
+                print(f"Found PS3 webMAN MOD at IP: {found_ip}")
+                self.save_config(found_ip)
                 break
             else:
                 print("PS3 not found on network, waiting 20 seconds before retry")
