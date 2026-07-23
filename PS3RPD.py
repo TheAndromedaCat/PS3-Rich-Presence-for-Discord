@@ -10,27 +10,52 @@
 from pathlib import Path
 from socket import socket, AF_INET, SOCK_DGRAM  # used to get host IP address
 import json  # used for configuration
+import urllib.parse  # used for URL encoding search terms
 import re  # used for regular expressions
 import os  # used to test if config exists
+import sys
 from time import (
     sleep,
 )  # used to add delay to mitigate rate limiting and webmanMOD memory consumption
 import subprocess  # used to send ICMP ping packets to PS3
 import platform  # used to get operating system of PC
 import sqlite3  # used for getting image from database
-import networkscan  # used for automatic obtaining IP address
 from time import time
-from bs4 import BeautifulSoup  # used for webpage scraping
-import requests  # used to test if given IP belongs to PS3
-from requests.exceptions import (
-    ConnectionError,
-)  # used to handle thrown errors on connecting to webpage
-from pypresence import (
-    Presence,
-    InvalidPipe,
-    InvalidID,
-    DiscordNotFound,
-)  # used for sending details to Discord
+
+try:
+    import networkscan  # used for automatic obtaining IP address
+    from bs4 import BeautifulSoup  # used for webpage scraping
+    import requests  # used to test if given IP belongs to PS3
+    from requests.exceptions import (
+        ConnectionError,
+    )  # used to handle thrown errors on connecting to webpage
+    from pypresence import (
+        Presence,
+        InvalidPipe,
+        InvalidID,
+        DiscordNotFound,
+    )  # used for sending details to Discord
+except ImportError as e:
+    print(f"\nMissing required Python package: {e}")
+    print("Attempting to auto-install missing packages via pip...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "bs4", "networkscan", "pypresence", "requests"])
+        import networkscan
+        from bs4 import BeautifulSoup
+        import requests
+        from requests.exceptions import ConnectionError
+        from pypresence import (
+            Presence,
+            InvalidPipe,
+            InvalidID,
+            DiscordNotFound,
+        )
+        print("Dependencies installed successfully!\n")
+    except Exception as install_err:
+        print(f"Auto-installation failed: {install_err}")
+        print("Please run 'start.py' or run: pip install bs4 networkscan pypresence requests")
+        input("\nPress Enter to exit...")
+        sys.exit(1)
 
 
 default_config = {
@@ -45,6 +70,7 @@ default_config = {
     "show_timer": True,
     "prefer_dev_app": False,
     "use_appname": False,
+    "steamgriddb_api_key": "",
 }
 
 
@@ -60,12 +86,21 @@ class PrepWork:  # Python2 class should be "class PrepWork(object):" ?
             with self.config_path.open(mode="r") as f:
                 self.config = json.load(f)
             self.config["wait_seconds"] = max(15, self.config["wait_seconds"])
+            if "steamgriddb_api_key" not in self.config:
+                self.prompt_steamgriddb_api_key()
             if not self.test_for_webman(self.config["ip"]) and self.config["ip_prompt"]:
                 print("PS3 cannot be reached via the IP saved in the config file.")
                 self.prompt_user()
         else:
-            self.config = default_config
+            self.config = default_config.copy()
             self.prompt_user()
+
+    def prompt_steamgriddb_api_key(self):
+        print("\nSteamGridDB API key is optional, but required to fetch game cover images.")
+        key_input = input("Enter SteamGridDB API key (press Enter to skip): ").strip()
+        self.config["steamgriddb_api_key"] = key_input
+        with self.config_path.open(mode="w+") as f:
+            json.dump(self.config, f, indent=4)
 
     def prompt_user(self):
         choice = "placeholder"
@@ -80,7 +115,10 @@ class PrepWork:  # Python2 class should be "class PrepWork(object):" ?
         elif choice[0].lower() == "m":
             self.get_IP_from_user()
         else:
-            exit("Unexpected input")
+            print("Unexpected input")
+            input("\nPress Enter to exit...")
+            sys.exit(1)
+        self.prompt_steamgriddb_api_key()
 
     def grab_host_network(
         self,
@@ -319,14 +357,22 @@ class GatherDetails:
 
     def get_PS3_image(
         self,
-    ):  # allow user to prefer using only discord dev app, otherwise try external psimg.db file, followed by try gametdb
+    ):  # allow user to prefer using only discord dev app, otherwise try external psimg.db file, followed by steamgriddb / gametdb
         self.image = self.titleID.lower()  # by default set titleID as image name for Discord developer application (must be lowercase)
         if prepWork.config["prefer_dev_app"] is False:
             if os.path.isfile(
                 "psimg.db"
             ):  # test if database is in same directory as script
                 self.image = self.use_local_db()
-            else:  # attempt to get image from GameTDB
+            else:
+                # 1. Attempt to get image from SteamGridDB
+                img_url = self.use_steamgriddb()
+                if img_url and img_url.startswith("http"):
+                    self.image = img_url
+                    print(f"get_PS3_image():    {self.image}")
+                    return
+
+                # 2. Fallback to GameTDB
                 self.image = self.use_gametdb()
         print(f"get_PS3_image():    {self.image}")
 
@@ -354,7 +400,77 @@ class GatherDetails:
             print("using psimg.db")
             return imgName
 
+    def use_steamgriddb(self):
+        if not self.name or self.name == "XMB":
+            return None
+
+        api_key = prepWork.config.get("steamgriddb_api_key", "").strip()
+        if not api_key:
+            print("use_steamgriddb(): No SteamGridDB API key configured, falling back to GameTDB")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "PS3RPD/1.9.7",
+        }
+
+        # Clean search term (remove trademark/copyright symbols and normalize spaces)
+        term = (
+            self.name.replace("®", "")
+            .replace("™", "")
+            .replace("©", "")
+            .replace("&amp;", "&")
+        )
+        term = re.sub(r"\s+", " ", term).strip()
+        encoded_term = urllib.parse.quote(term)
+
+        try:
+            search_url = f"https://www.steamgriddb.com/api/v2/search/autocomplete/{encoded_term}"
+            res = requests.get(search_url, headers=headers, timeout=10)
+            if res.status_code != 200:
+                print(f"use_steamgriddb(): Search HTTP {res.status_code} for '{term}'")
+                return None
+
+            search_data = res.json()
+            if not search_data.get("success") or not search_data.get("data"):
+                print(f"use_steamgriddb(): No game found for '{term}'")
+                return None
+
+            game_id = search_data["data"][0]["id"]
+            game_name = search_data["data"][0]["name"]
+
+            # 1. Try 1:1 grids first (1024x1024 or 512x512)
+            grid_url_1to1 = f"https://www.steamgriddb.com/api/v2/grids/game/{game_id}?types=static&humor=false&dimensions=1024x1024,512x512"
+            res_grid = requests.get(grid_url_1to1, headers=headers, timeout=10)
+            if res_grid.status_code == 200:
+                grid_data = res_grid.json()
+                if grid_data.get("success") and grid_data.get("data"):
+                    img_url = grid_data["data"][0]["url"]
+                    print(f"using SteamGridDB 1:1 cover for '{game_name}' ({game_id})")
+                    return img_url
+
+            # 2. Fallback to other sizes if 1:1 is not available
+            grid_url_any = f"https://www.steamgriddb.com/api/v2/grids/game/{game_id}?types=static&humor=false"
+            res_grid_any = requests.get(grid_url_any, headers=headers, timeout=10)
+            if res_grid_any.status_code == 200:
+                grid_data_any = res_grid_any.json()
+                if grid_data_any.get("success") and grid_data_any.get("data"):
+                    img_url = grid_data_any["data"][0]["url"]
+                    print(f"using SteamGridDB cover for '{game_name}' ({game_id})")
+                    return img_url
+
+            print(
+                f"use_steamgriddb(): No static grids found for '{game_name}' ({game_id})"
+            )
+        except Exception as e:
+            print(f"use_steamgriddb(): Exception occurred: {e}")
+
+        return None
+
     def use_gametdb(self):  # Original idea from AndreCox
+        if not self.titleID or len(self.titleID) < 3:
+            return self.titleID.lower() if self.titleID else "xmb"
+
         region_map = {  # this needs further testing
             "A": "ZH",  # ?
             "E": "EN",
@@ -373,7 +489,7 @@ class GatherDetails:
             return self.titleID.lower()  # bandaid fix, use Discord dev app
         else:
             url = f"https://art.gametdb.com/ps3/cover/{val}/{self.titleID}.jpg"  # build URL
-            status = requests.get(url, headers={"User-Agent": "PS3RPD/1.9.7"})  # set headers at request of gametdb contributor
+            status = requests.get(url, headers={"User-Agent": "PS3RPD/1.9.7"}, timeout=10)  # set headers at request of gametdb contributor
             if status.status_code == 200:  # test if page exists
                 print("using GameTDB")
                 return url
@@ -384,6 +500,12 @@ class GatherDetails:
                 return self.titleID.lower()  # bandaid fix, use Discord dev app
 
     def get_retro_image(self):  # uses 'name' for image names
+        if prepWork.config["prefer_dev_app"] is False and self.name != "PlayStation 1/2":
+            img_result = self.use_steamgriddb()
+            if img_result and img_result.startswith("http"):
+                self.image = img_result
+                print(f"get_retro_image():  {self.image}")
+                return
         # apply Discord developer application naming conventions
         imgName = self.name.lower()  # must be lowercase
         imgName = imgName.replace(" ", "_")  # replace spaces with underscores
@@ -416,7 +538,9 @@ prevTitle = ""  # set default value to be compared in get_PS3_details()
 if (
     prepWork.config["ip"] is None
 ):  # very basic error notification for if PrepWork breaks
-    exit("script failed to execute critical functions.")
+    print("script failed to execute critical functions.")
+    input("\nPress Enter to exit...")
+    sys.exit(1)
 
 while True:
     if not gatherDetails.get_html():  # triggered if webman goes down

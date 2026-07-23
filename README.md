@@ -12,18 +12,23 @@ Display what game you are playing on PS3 via your PC!
 	</tr>
 	<tr>
 		<td>XMB</td>
-		<td> <img src="https://github.com/zorua98741/PS3-Rich-Presence-for-Discord/blob/main/img/xmb.png?raw=true"> </td>
-		<td> <img src="https://github.com/zorua98741/PS3-Rich-Presence-for-Discord/blob/main/img/xmb2025.png?raw=true"></td>
+		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/xmb.png?raw=true"> </td>
+		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/xmb2025.png?raw=true"></td>
 	</tr>
 	<tr>
 		<td>PS3</td>
-		<td> <img src="https://github.com/zorua98741/PS3-Rich-Presence-for-Discord/blob/main/img/ps3.png?raw=true"> </td>
-		<td> <img src="https://github.com/zorua98741/PS3-Rich-Presence-for-Discord/blob/main/img/ps32025.png?raw=true"></td>
+		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/ps3.png?raw=true"> </td>
+		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/ps32025.png?raw=true"></td>
 	</tr>
 	<tr>
 		<td>PS1/2</td>
-		<td> <img src="https://github.com/zorua98741/PS3-Rich-Presence-for-Discord/blob/main/img/retro.png?raw=true"> </td>
-		<td> <img src="https://github.com/zorua98741/PS3-Rich-Presence-for-Discord/blob/main/img/retro2025.png?raw=true"></td>
+		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/retro.png?raw=true"> </td>
+		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/retro2025.png?raw=true"></td>
+	</tr>
+	<tr>
+		<td>SGDB</td>
+		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/sgdb.png?raw=true"> </td>
+		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/sgdb2025.png?raw=true"></td>
 	</tr>
 </table>
 
@@ -39,9 +44,9 @@ Display what game you are playing on PS3 via your PC!
 * A Python 3.9 interpreter installed on the PC if you do not wish to use the executable file
 
 ### Windows
-* [version 1.9.7 .exe](https://github.com/zorua98741/PS3-Rich-Presence-for-Discord/releases/download/v1.9.7/PS3RPD.exe)
+* [version 1.9.7 .exe](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/v1.9.7/PS3RPD.exe)
 or
-* [version 1.9.7 .py](https://github.com/zorua98741/PS3-Rich-Presence-for-Discord/releases/download/v1.9.7/PS3RPD.py)
+* [version 1.9.7 .py](https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/releases/download/v1.9.7/PS3RPD.py)
 
 #### Installing as a Windows service (optional)
 Download [NSSM](https://nssm.cc/release/nssm-2.24.zip) and run `nssm install <service name ie. ps3rpd>` to install PS3RPD as a Windows service.
@@ -56,7 +61,7 @@ WARNING: PS3RPD.exe must be in a location that won't change ie. C:\ps3rpd\PS3RPD
 To download and run the script for the first time:
 ```bash
 # Clone the GitHub repository under the user folder
-git clone https://github.com/zorua98741/PS3-Rich-Presence-for-Discord ~/ps3-rich-presence
+git clone https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord ~/ps3-rich-presence
 # Run the start script
 cd ~/ps3-rich-presence && ./start.py
 ```
@@ -119,21 +124,27 @@ For more depth logs you can use `journalctl --user -xeu ps3rpd`
 	- If you want to use a .exe, [here](https://www.mediafire.com/file/ezzlcemhkmnmyn2/PS3RPD.exe/file) is a version that may or may not fully function (very little bug testing has been done)
 
 ## Contact Me
-Contact me via Discord: `zorua98741`/`zorua98741#0023`.
+Contact me via Discord: `TheAndromedaCat`.
 
 ## Additional Information
 
-### GameTDB
-This script can utilise images provided by [GameTDB](https://www.gametdb.com/), if you are able, consider supporting the service.
+### Cover Images (SteamGridDB & GameTDB)
+This script automatically fetches high-quality game cover images using a multi-tiered fallback system:
+1. **SteamGridDB**: If a SteamGridDB API key is provided, the script searches by game name for static 1:1 square cover grids (`1024x1024` or `512x512`), falling back to other static dimensions if needed.
+2. **GameTDB**: If no SteamGridDB API key is provided (or if SteamGridDB has no grid for the game), the script automatically falls back to [GameTDB](https://www.gametdb.com/) using the PS3 title ID.
+3. **Discord Developer Application**: Final fallback to default asset names matching the lowercase title ID (`abcd12345`).
+
+Consider supporting [SteamGridDB](https://www.steamgriddb.com/) and [GameTDB](https://www.gametdb.com/) if you use these services!
 
 ### External config file
-PS3RPD makes use of an external config file to persistently store a few variables, on creation, the default values will be:
-* Your PS3's IP address 	(where the script will find your PS3 on the network)
-* My Discord developer application's ID 		(where the script will send presence data to)
-* A refresh time of 35 seconds 					(how often to get new data (minimum value of 15 seconds)
-* To show the PS3's temperature
-* To use a shared cover for PS2&PSX games
-* To display the time elapsed
+PS3RPD makes use of an external config file (`ps3rpdconfig.txt`) to persistently store settings:
+* `ip`: Your PS3's IP address (where the script will find your PS3 on the network)
+* `client_id`: Discord developer application ID
+* `wait_seconds`: Refresh interval (default: 35 seconds, minimum: 15 seconds)
+* `show_temp`: Whether to display PS3 temperatures
+* `retro_covers`: Whether to fetch covers for PS2 & PS1 games
+* `show_elapsed`: Whether to display time elapsed
+* `steamgriddb_api_key`: Your SteamGridDB API key (optional; leave blank to use GameTDB fallback)
 
 ### Using your own images
 If you'd like to control what images are used for each game, you must create a Discord Developer Application over at the [Discord Developer Portal](https://discord.com/developers/applications).
@@ -142,4 +153,5 @@ Once created, copy the application ID from the Developer Portal and paste it int
 
 You are now able to upload your own assets in the Developer Portal under `Rich Presence > Art Assets`. Note that the name of the asset uploaded must be the lowercase title ID provided in the script's output. (e.g. `abcd12345`)
 
+Support the original creator (@zorua98741) at the ko-fi link below!
 ## [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/N4N87V7K5) [![pypresence](https://img.shields.io/badge/using-pypresence-00bb88.svg?style=for-the-badge&logo=discord&logoWidth=20)](https://github.com/qwertyquerty/pypresence)
