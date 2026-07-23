@@ -618,9 +618,10 @@ def main_cli():
                 "Â", ""
             )  # ! bandaid fix ! ANSI encoding is being used on some users??
 
-            if prepWork.config["use_appname"]:  # accommodate API now allowing for us to set name
+            if prepWork.config["use_appname"]:  # Use App/Game Name as Presence Title
                 try:
                     prepWork.RPC.update(
+                        name=gatherDetails.name,
                         details=gatherDetails.name,
                         state=gatherDetails.thermalData,
                         large_image=gatherDetails.image,
@@ -633,8 +634,8 @@ def main_cli():
             else:
                 try:
                     prepWork.RPC.update(
-                        name=gatherDetails.name,
-                        details=gatherDetails.thermalData,
+                        details=gatherDetails.name,
+                        state=gatherDetails.thermalData,
                         large_image=gatherDetails.image,
                         large_text=gatherDetails.titleID,
                         start=timer,

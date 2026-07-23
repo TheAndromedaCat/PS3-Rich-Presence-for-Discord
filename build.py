@@ -48,8 +48,8 @@ def main():
     shutil.copy2(ROOT / "PS3RPD.py", DIST / "PS3RPD.py")
 
     # 4. Package Python source ZIP archive
-    print("\n[4/4] Packaging dist/PS3RPD-GUI-v2.1.0-Python.zip...")
-    zip_path = DIST / "PS3RPD-GUI-v2.1.0-Python.zip"
+    print("\n[4/4] Packaging dist/PS3RPD-GUI-v2.1.1-Python.zip...")
+    zip_path = DIST / "PS3RPD-GUI-v2.1.1-Python.zip"
     files_to_zip = ["PS3RPD_GUI.py", "PS3RPD.py", "start.py", "icon.ico", "README.md"]
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for fname in files_to_zip:

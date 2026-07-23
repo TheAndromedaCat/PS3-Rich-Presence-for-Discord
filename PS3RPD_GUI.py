@@ -747,8 +747,6 @@ class PS3RPD_GUI(tk.Tk):
             elif not self.prepWork.config["use_tray"] and self.tray_icon:
                 self.stop_tray_icon()
 
-        messagebox.showinfo("Saved", "Settings saved successfully!")
-
     def start_rpc_worker(self):
         self.rpc_running = True
         self.worker_thread = threading.Thread(target=self.rpc_worker_loop, daemon=True)
@@ -831,6 +829,7 @@ class PS3RPD_GUI(tk.Tk):
                     try:
                         if self.prepWork.config.get("use_appname", False):
                             self.prepWork.RPC.update(
+                                name=details_str,
                                 details=details_str,
                                 state=state_str,
                                 large_image=large_img_str,
@@ -839,7 +838,6 @@ class PS3RPD_GUI(tk.Tk):
                             )
                         else:
                             self.prepWork.RPC.update(
-                                name=details_str,
                                 details=details_str,
                                 state=state_str,
                                 large_image=large_img_str,
