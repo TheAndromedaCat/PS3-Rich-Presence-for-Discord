@@ -22,7 +22,7 @@ Display what game you are playing on PS3 via your PC!
 	</tr>
 	<tr>
 		<td>SGDB</td>
-		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/sgdb2025.png?raw=true"> </td>
+		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/sgdb.png?raw=true"> </td>
 		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/sgdb2025.png?raw=true"></td>
 	</tr>
 	<tr>
