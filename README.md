@@ -21,14 +21,14 @@ Display what game you are playing on PS3 via your PC!
 		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/ps32025.png?raw=true"></td>
 	</tr>
 	<tr>
-		<td>PS1/2</td>
-		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/retro.png?raw=true"> </td>
-		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/retro2025.png?raw=true"></td>
-	</tr>
-	<tr>
 		<td>SGDB</td>
 		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/sgdb.png?raw=true"> </td>
 		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/sgdb2025.png?raw=true"></td>
+	</tr>
+	<tr>
+		<td>PS1/2</td>
+		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/retro.png?raw=true"> </td>
+		<td> <img src="https://github.com/TheAndromedaCat/PS3-Rich-Presence-for-Discord/blob/main/img/retro2025.png?raw=true"></td>
 	</tr>
 </table>
 
@@ -126,6 +126,9 @@ For more depth logs you can use `journalctl --user -xeu ps3rpd`
 ## Contact Me
 Contact me via Discord: `TheAndromedaCat`.
 
+## Credits
+Original script created by [@zorua98741](https://github.com/zorua98741).
+
 ## Additional Information
 
 ### Cover Images (SteamGridDB & GameTDB)
@@ -145,6 +148,9 @@ PS3RPD makes use of an external config file (`ps3rpdconfig.txt`) to persistently
 * `retro_covers`: Whether to fetch covers for PS2 & PS1 games
 * `show_elapsed`: Whether to display time elapsed
 * `steamgriddb_api_key`: Your SteamGridDB API key (optional; leave blank to use GameTDB fallback)
+* `autostart`: Automatically start PS3RPD on Windows startup
+* `start_minimized`: Launch application minimized
+* `use_tray`: Minimize to System Tray (Notification Area) instead of taskbar
 
 ### Using your own images
 If you'd like to control what images are used for each game, you must create a Discord Developer Application over at the [Discord Developer Portal](https://discord.com/developers/applications).

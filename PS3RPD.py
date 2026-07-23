@@ -203,15 +203,16 @@ class PrepWork:  # Python2 class should be "class PrepWork(object):" ?
             json.dump(self.config, f, indent=4)
 
     def connect_to_discord(self):
-        while True:
-            try:
-                self.RPC = Presence(self.config["client_id"])
-                self.RPC.connect()
-                print("connected to Discord client")
-                break
-            except DiscordNotFound as e:
-                print(f'could not find Discord client running. "{e}"')
-                sleep(20)
+        try:
+            cid = str(self.config.get("client_id", 780389261870235650)).strip()
+            self.RPC = Presence(cid)
+            self.RPC.connect()
+            print(f"connected to Discord client with ID {cid}")
+            return True
+        except Exception as e:
+            print(f'connect_to_discord(): could not connect to Discord client: "{e}"')
+            self.RPC = None
+            return False
 
 
 class GatherDetails:
@@ -221,34 +222,44 @@ class GatherDetails:
         self.name = None
         self.titleID = None
         self.image = None
+        self.image_source = "Discord Developer Application"
         self.isRetroGame = False
+        self.prevTitle = ""
 
     def ping_PS3(
-        self,
+        self, ip=None
     ):  # Will work if webman is unloaded for some reason, will hopefully greatly reduce risk of
         # PS3 crashing when webman is contacted while also loading or quitting out of a game. (! Needs further testing !)
+        target_ip = ip or (prepWork.config.get("ip", "") if prepWork and hasattr(prepWork, "config") else "")
+        if not target_ip:
+            return False
+        kwargs = {}
         if platform.system().lower() == "windows":
-            command = ["ping", "-n", "5", prepWork.config["ip"]]
+            command = ["ping", "-n", "2", "-w", "1000", target_ip]
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
         else:
-            command = ["ping", "-c", "5", prepWork.config["ip"]]
+            command = ["ping", "-c", "2", "-W", "1", target_ip]
         with open(
             os.devnull, "w"
         ) as DEVNULL:  # used so output of ping doesn't spam console
             try:
                 subprocess.check_call(
-                    command, stdout=DEVNULL
+                    command, stdout=DEVNULL, stderr=DEVNULL, **kwargs
                 )  # ! needs to be tested on Linux !
                 return True
             except subprocess.CalledProcessError:
                 return False
 
-    def get_html(self):
-        url = f"http://{prepWork.config['ip']}/cpursx.ps3?/sman.ps3"
-        if not self.ping_PS3():
+    def get_html(self, ip=None):
+        target_ip = ip or (prepWork.config.get("ip", "") if prepWork and hasattr(prepWork, "config") else "")
+        if not target_ip:
+            return False
+        url = f"http://{target_ip}/cpursx.ps3?/sman.ps3"
+        if not self.ping_PS3(target_ip):
             return False
 
         try:
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=10)
             self.soup = BeautifulSoup(response.text, "html.parser")
             return True
         except ConnectionError as e:
@@ -291,6 +302,7 @@ class GatherDetails:
             print("decide_game_type():  XMB")
             self.name = "XMB"
             self.image = "xmb"
+            self.image_source = "Discord Developer Application"
             self.titleID = None  # even though not used needs to be reset so prev titleID is not shown when on XMB
 
     def get_PS3_details(self):
@@ -319,8 +331,9 @@ class GatherDetails:
         self.name = name
         self.titleID = titleID
         print(f"get_PS3_details():  {titleID} | {name}")
-        if prevTitle != titleID:  # only get new image if a new game is found
+        if self.prevTitle != titleID:  # only get new image if a new game is found
             self.get_PS3_image()
+            self.prevTitle = titleID
 
     def get_retro_details(
         self,
@@ -333,7 +346,7 @@ class GatherDetails:
                     "a", href=re.compile("/(dev_hdd0|dev_usb00[0-9])/PSXISO")
                 )
                 is not None
-            ):  # only PSX
+            ):  # only PS1
                 name = self.soup.find(
                     "a", href=re.compile("/(dev_hdd0|dev_usb00[0-9])/PSXISO")
                 ).find_next_sibling()
@@ -358,22 +371,32 @@ class GatherDetails:
     def get_PS3_image(
         self,
     ):  # allow user to prefer using only discord dev app, otherwise try external psimg.db file, followed by steamgriddb / gametdb
-        self.image = self.titleID.lower()  # by default set titleID as image name for Discord developer application (must be lowercase)
+        self.image = self.titleID.lower() if self.titleID else "xmb"
+        self.image_source = "Discord Developer Application"
         if prepWork.config["prefer_dev_app"] is False:
             if os.path.isfile(
                 "psimg.db"
             ):  # test if database is in same directory as script
                 self.image = self.use_local_db()
+                self.image_source = "Local Database (psimg.db)"
             else:
                 # 1. Attempt to get image from SteamGridDB
                 img_url = self.use_steamgriddb()
                 if img_url and img_url.startswith("http"):
                     self.image = img_url
+                    self.image_source = "SteamGridDB"
                     print(f"get_PS3_image():    {self.image}")
                     return
 
                 # 2. Fallback to GameTDB
-                self.image = self.use_gametdb()
+                gtdb_res = self.use_gametdb()
+                if gtdb_res and gtdb_res.startswith("http"):
+                    self.image = gtdb_res
+                    self.image_source = "GameTDB"
+                    return
+                else:
+                    self.image = gtdb_res
+                    self.image_source = "Discord Developer Application"
         print(f"get_PS3_image():    {self.image}")
 
     def use_local_db(
@@ -504,6 +527,7 @@ class GatherDetails:
             img_result = self.use_steamgriddb()
             if img_result and img_result.startswith("http"):
                 self.image = img_result
+                self.image_source = "SteamGridDB"
                 print(f"get_retro_image():  {self.image}")
                 return
         # apply Discord developer application naming conventions
@@ -517,6 +541,7 @@ class GatherDetails:
         )  # replace any non-letter, digit, or underscore
         imgName = imgName[:32]  # maximum length of 32 characters
         self.image = imgName
+        self.image_source = "Discord Developer Application"
         print(f"get_retro_image():  {imgName}")
 
 
@@ -525,81 +550,87 @@ headers = {
 }  # Alternatively {'Content-Type': 'text/html'}. Used by both classes
 wmanVer = "1.47.45"  # static string so I can indicate what ver the script was last tested with
 
-prepWork = PrepWork()
-prepWork.read_config()  # runs through majority of functions in PrepWork class
-prepWork.connect_to_discord()  # running NetworkScan before PyPresence breaks asyncIO, I am not motivated enough to find proper fix.
-closed = False  # boolean for RPC pipe
-gatherDetails = GatherDetails()
-timer = None  # default value for if config set to false
-if prepWork.config["show_timer"]:
-    timer = time()  # start timer
-prevTitle = ""  # set default value to be compared in get_PS3_details()
+def main_cli():
+    global prepWork, closed, gatherDetails, timer, prevTitle
+    prepWork = PrepWork()
+    prepWork.read_config()  # runs through majority of functions in PrepWork class
+    prepWork.connect_to_discord()  # running NetworkScan before PyPresence breaks asyncIO, I am not motivated enough to find proper fix.
+    closed = False  # boolean for RPC pipe
+    gatherDetails = GatherDetails()
+    timer = None  # default value for if config set to false
+    if prepWork.config["show_timer"]:
+        timer = time()  # start timer
+    prevTitle = ""  # set default value to be compared in get_PS3_details()
 
-if (
-    prepWork.config["ip"] is None
-):  # very basic error notification for if PrepWork breaks
-    print("script failed to execute critical functions.")
-    input("\nPress Enter to exit...")
-    sys.exit(1)
+    if (
+        prepWork.config["ip"] is None
+    ):  # very basic error notification for if PrepWork breaks
+        print("script failed to execute critical functions.")
+        input("\nPress Enter to exit...")
+        sys.exit(1)
 
-while True:
-    if not gatherDetails.get_html():  # triggered if webman goes down
-        if (
-            gatherDetails.isRetroGame is True
-        ):  # should only occur if PS2 game is mounted
-            print(
-                f"PS2 game previously mounted, keeping RPC active and waiting {prepWork.config['wait_seconds']} seconds"
-            )
-            sleep(prepWork.config["wait_seconds"])
-        else:
-            print(
-                f"PS3 not found on network, closing RPC and hibernating {prepWork.config['hibernate_seconds']} seconds."
-            )
-            if not closed:
-                prepWork.RPC.clear()
-            prepWork.RPC.close()  # destroy pipe
-            closed = True
-            sleep(float(prepWork.config["hibernate_seconds"]))
-    else:  # continue with normal program loop
-        print("")
-        if closed:  # decide if RPC needs to be reconnected
-            prepWork.connect_to_discord()
-            timer = time()
-            closed = False
-        if prepWork.config["show_temp"]:  # first character of variable in lowercase
-            gatherDetails.get_thermals()
-            gatherDetails.thermalData = gatherDetails.thermalData.replace(
+    while True:
+        if not gatherDetails.get_html():  # triggered if webman goes down
+            if (
+                gatherDetails.isRetroGame is True
+            ):  # should only occur if PS2 game is mounted
+                print(
+                    f"PS2 game previously mounted, keeping RPC active and waiting {prepWork.config['wait_seconds']} seconds"
+                )
+                sleep(prepWork.config["wait_seconds"])
+            else:
+                print(
+                    f"PS3 not found on network, closing RPC and hibernating {prepWork.config['hibernate_seconds']} seconds."
+                )
+                if not closed:
+                    prepWork.RPC.clear()
+                prepWork.RPC.close()  # destroy pipe
+                closed = True
+                sleep(float(prepWork.config["hibernate_seconds"]))
+        else:  # continue with normal program loop
+            print("")
+            if closed:  # decide if RPC needs to be reconnected
+                prepWork.connect_to_discord()
+                timer = time()
+                closed = False
+            if prepWork.config["show_temp"]:  # first character of variable in lowercase
+                gatherDetails.get_thermals()
+                gatherDetails.thermalData = gatherDetails.thermalData.replace(
+                    "Â", ""
+                )  # ! bandaid fix ! ANSI encoding is being used on some users??
+            gatherDetails.decide_game_type()
+            # print(f'{gatherDetails.name}, {gatherDetails.thermalData}, {gatherDetails.image}, {gatherDetails.titleID}')   # debugging
+            gatherDetails.name = gatherDetails.name.replace(
                 "Â", ""
             )  # ! bandaid fix ! ANSI encoding is being used on some users??
-        gatherDetails.decide_game_type()
-        # print(f'{gatherDetails.name}, {gatherDetails.thermalData}, {gatherDetails.image}, {gatherDetails.titleID}')   # debugging
-        gatherDetails.name = gatherDetails.name.replace(
-            "Â", ""
-        )  # ! bandaid fix ! ANSI encoding is being used on some users??
 
-        if prepWork.config["use_appname"]:  # accommodate API now allowing for us to set name
-            try:
-                prepWork.RPC.update(
-                    details=gatherDetails.name,
-                    state=gatherDetails.thermalData,
-                    large_image=gatherDetails.image,
-                    large_text=gatherDetails.titleID,
-                    start=timer,
-                )
-            except (InvalidPipe, InvalidID):
-                prepWork.RPC.close()  # close Presence if Discord is not found     ! Does this actually do anything? !
-                prepWork.connect_to_discord()  # start connection loop
-        else:
-            try:
-                prepWork.RPC.update(
-                    name=gatherDetails.name,
-                    details=gatherDetails.thermalData,
-                    large_image=gatherDetails.image,
-                    large_text=gatherDetails.titleID,
-                    start=timer,
-                )
-            except (InvalidPipe, InvalidID):
-                prepWork.RPC.close()  # close Presence if Discord is not found     ! Does this actually do anything? !
-                prepWork.connect_to_discord()  # start connection loop
-        prevTitle = gatherDetails.titleID  # set new value for next loop
-        sleep(prepWork.config["wait_seconds"])
+            if prepWork.config["use_appname"]:  # accommodate API now allowing for us to set name
+                try:
+                    prepWork.RPC.update(
+                        details=gatherDetails.name,
+                        state=gatherDetails.thermalData,
+                        large_image=gatherDetails.image,
+                        large_text=gatherDetails.titleID,
+                        start=timer,
+                    )
+                except (InvalidPipe, InvalidID):
+                    prepWork.RPC.close()  # close Presence if Discord is not found     ! Does this actually do anything? !
+                    prepWork.connect_to_discord()  # start connection loop
+            else:
+                try:
+                    prepWork.RPC.update(
+                        name=gatherDetails.name,
+                        details=gatherDetails.thermalData,
+                        large_image=gatherDetails.image,
+                        large_text=gatherDetails.titleID,
+                        start=timer,
+                    )
+                except (InvalidPipe, InvalidID):
+                    prepWork.RPC.close()  # close Presence if Discord is not found     ! Does this actually do anything? !
+                    prepWork.connect_to_discord()  # start connection loop
+            prevTitle = gatherDetails.titleID  # set new value for next loop
+            sleep(prepWork.config["wait_seconds"])
+
+
+if __name__ == "__main__":
+    main_cli()

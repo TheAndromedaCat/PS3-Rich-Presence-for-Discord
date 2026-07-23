@@ -29,7 +29,7 @@ def ask_install_uv():
                 print("Installing required packages directly via pip...")
                 try:
                     subprocess.check_call(
-                        [sys.executable, "-m", "pip", "install", "bs4", "networkscan", "pypresence", "requests"]
+                        [sys.executable, "-m", "pip", "install", "bs4", "networkscan", "pypresence", "requests", "pystray", "Pillow"]
                     )
                     print("Dependencies installed successfully.")
                     return "pip_direct"
@@ -55,14 +55,15 @@ def ask_install_uv():
                 input("\nPress Enter to exit...")
                 sys.exit(1)
     else:
-        print("uv is required to run the script with dependencies. Exiting.")
+        print("Exiting.")
         input("\nPress Enter to exit...")
         sys.exit(1)
 
 
 def run_with_uv():
     uv_cmd = shutil.which("uv") or shutil.which("uv.exe") or "uv"
-    args = [uv_cmd, "run", "--script", "./PS3RPD.py"]
+    target = "./PS3RPD_GUI.py" if os.path.exists("./PS3RPD_GUI.py") else "./PS3RPD.py"
+    args = [uv_cmd, "run", "--script", target]
     try:
         subprocess.check_call(args)
     except Exception as e:
@@ -72,8 +73,9 @@ def run_with_uv():
 
 
 def run_directly():
+    target = "./PS3RPD_GUI.py" if os.path.exists("./PS3RPD_GUI.py") else "./PS3RPD.py"
     try:
-        subprocess.check_call([sys.executable, "./PS3RPD.py"])
+        subprocess.check_call([sys.executable, target])
     except Exception as e:
         print(f"Failed to run script directly: {e}")
         input("\nPress Enter to exit...")
