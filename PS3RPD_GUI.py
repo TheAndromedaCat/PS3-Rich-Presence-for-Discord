@@ -830,7 +830,7 @@ class PS3RPD_GUI(tk.Tk):
                         if self.prepWork.config.get("use_appname", False):
                             self.prepWork.RPC.update(
                                 name=details_str,
-                                details=details_str,
+                                details="on PlayStation 3",
                                 state=state_str,
                                 large_image=large_img_str,
                                 large_text=large_txt_str,

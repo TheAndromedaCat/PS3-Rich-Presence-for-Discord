@@ -622,7 +622,7 @@ def main_cli():
                 try:
                     prepWork.RPC.update(
                         name=gatherDetails.name,
-                        details=gatherDetails.name,
+                        details="on PlayStation 3",
                         state=gatherDetails.thermalData,
                         large_image=gatherDetails.image,
                         large_text=gatherDetails.titleID,
