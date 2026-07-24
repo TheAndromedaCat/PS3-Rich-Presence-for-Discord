@@ -1,3 +1,5 @@
+[![VitaPresence](https://i.imgur.com/wsMLoSI.png)](https://github.com/TheAndromedaCat/VitaPresence)
+
 # PS3-Rich-Presence-for-Discord
 Discord Rich Presence script for PS3 consoles on HFW&HEN or CFW.
 
