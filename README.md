@@ -32,6 +32,9 @@ Display what game you are playing on PS3 via your PC!
 	</tr>
 </table>
 
+## GUI App Interface
+<img width="642" height="593" alt="image" src="https://github.com/user-attachments/assets/55944cc3-ebf5-40fc-96ee-05d6b1430306" />
+
 
 ## Usage
 
