@@ -8,3 +8,4 @@ PS3RPD.spec
 icon.ico
 logo.png
 __pycache__/
+dist/
